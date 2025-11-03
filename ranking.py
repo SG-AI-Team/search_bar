@@ -1,8 +1,14 @@
 from numpy import array
 
-def hybrid_retrieve(vdb, query, k, rank_weight=0.3, sim_weight=0.7, filter=None):
+def hybrid_retrieve(vdb, query, k, rank_weight=0.3, sim_weight=0.7, filter=None, where_document=None):
     try:
-        docs_with_scores = vdb.similarity_search_with_score(query, k=k, filter=filter or None)
+        search_kwargs = {"k": k}
+        if filter:
+            search_kwargs["filter"] = filter
+        if where_document:
+            search_kwargs["where_document"] = where_document
+            
+        docs_with_scores = vdb.similarity_search_with_score(query, **search_kwargs)
     except Exception as e:
         print(f"Error in similarity_search_with_score: {e}")
         return []

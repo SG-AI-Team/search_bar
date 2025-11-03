@@ -84,13 +84,14 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         
         if is_filter_query == True:
             try:
-                if rewritten_query != '':
+                # Fix: Define rewritten_query before using it
+                if 'rewritten_query' in locals() and rewritten_query != '':
                     not_exclude_filter_statments = not_exclude_ids(school_ids, program_ids)
-                if not_exclude_filter_statments:
-                    if 'filter' in search_kwargs:
-                        search_kwargs['filter'] = {"$and": [search_kwargs['filter'], not_exclude_filter_statments]}
-                    else:
-                        search_kwargs['filter'] = not_exclude_filter_statments
+                    if not_exclude_filter_statments:
+                        if 'filter' in search_kwargs:
+                            search_kwargs['filter'] = {"$and": [search_kwargs['filter'], not_exclude_filter_statments]}
+                        else:
+                            search_kwargs['filter'] = not_exclude_filter_statments
             except Exception as e:
                 print(f"Error applying filter query filters: {e}")
         
@@ -133,7 +134,17 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                 else:
                     k = 30 
                 
-                content = hybrid_retrieve(vdb = vdb, query= rewritten_query, k = k,filter = search_kwargs.get("filter", None))
+                # Extract filters properly for hybrid_retrieve
+                metadata_filter = search_kwargs.get('filter')
+                document_filter = search_kwargs.get('where_document')
+                
+                content = hybrid_retrieve(
+                    vdb=vdb, 
+                    query=rewritten_query, 
+                    k=k, 
+                    filter=metadata_filter,
+                    where_document=document_filter
+                )
             except Exception as e:
                 print(f"Error in hybrid_retrieve: {e}")
                 return [], [], [], []
@@ -149,7 +160,9 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
 
         # Relevance filter
         try:
-            relevant_docs = batch_relevance_filter(rewritten_query, content, search_kwargs)
+            # Pass only metadata filters to relevance filter, not document filters
+            metadata_only_kwargs = {k: v for k, v in search_kwargs.items() if k != 'where_document'}
+            relevant_docs = batch_relevance_filter(rewritten_query, content, metadata_only_kwargs)
             print(f"After relevance filtering: {len(relevant_docs)} documents")
         except Exception as e:
             print(f"Error in relevance filtering: {e}")
