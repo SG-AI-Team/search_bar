@@ -1,4 +1,6 @@
 from langchain_openai import ChatOpenAI
+from langchain_deepseek import ChatDeepSeek
+from langchain_xai import ChatXAI
 from dotenv import load_dotenv
 import functools
 from langsmith import Client
@@ -18,18 +20,34 @@ load_dotenv()
 
 
 @functools.lru_cache(maxsize=1)
-def get_llm():
+def get_openai_llm():
     return ChatOpenAI(
         model="gpt-4o-mini",
         temperature=0.0,
     )
+@functools.lru_cache(maxsize=1)
+def get_deepseek_llm():
+    return ChatDeepSeek(
+    model="deepseek-chat",
+    temperature=0.0,
+    max_tokens=4048,
+    top_p=1,
+)
+@functools.lru_cache(maxsize=1)
+def get_xai_llm():
+    return ChatXAI(
+    model="grok-4-fast",
+    temperature=0.0,
+)
 
-llm_4o_mini = get_llm()
+llm_4o_mini = get_openai_llm()
+deepseek_llm = get_deepseek_llm
+llm_grok = get_xai_llm()
 
 
 
 
-def handle_typo_errors(user_input: str, search_kwargs: list ):
+def handle_typo_errors(user_input: str):
     try:
         # Handle empty input early
         if not user_input.strip():
@@ -37,13 +55,12 @@ def handle_typo_errors(user_input: str, search_kwargs: list ):
         
         try:
             prompt = pull_prompt_from_langsmith("typo-error-handle-prompt-search-bar")
-            print(search_kwargs)
         except Exception as e:
             print(f"Error pulling prompt: {e}")
             return user_input  # Return original input if prompt fails
         
         try:
-            response = llm_4o_mini.invoke(prompt.format(user_input=user_input, search_kwargs=search_kwargs)).content
+            response = llm_grok.invoke(prompt.format(user_input=user_input)).content
             print(response)
             return response
         except Exception as e:
@@ -54,74 +71,49 @@ def handle_typo_errors(user_input: str, search_kwargs: list ):
         print(f"Unexpected error in handle_typo_errors: {e}")
         return user_input
 
-def batch_relevance_filter(user_input: str, docs: list, search_kwargs: dict):
-    """
-    Filter a list of documents for relevance in a single LLM call.
-    Returns only the relevant documents.
-    """
+def batch_relevance_filter(user_input: str, docs: list):
+    """Filter documents for relevance using LLM"""
+    # Handle edge cases
+    if not docs or not user_input.strip():
+        return docs
+    
     try:
-        print(f"DEBUG: batch_relevance_filter called with user_input='{user_input}', len(docs)={len(docs)}")
-        print(f"DEBUG: user_input.strip()='{user_input.strip()}', bool check={not user_input.strip()}")
+        # Get prompt and format documents
+        prompt_template = pull_prompt_from_langsmith("relevance-check-search-bar")
+        if not prompt_template:
+            return docs
         
-        if not docs:
+        # Convert docs to numbered text
+        docs_text = []
+        for i, doc in enumerate(docs, 1):
+            content = getattr(doc, 'page_content', str(doc))
+            docs_text.append(f"{i}. {content}")
+        
+        # Call LLM
+        prompt = prompt_template.format(
+            user_input=user_input.strip(),
+            docs_text=docs_text
+        )
+        
+        response = llm_grok.invoke(prompt).content.strip().upper()
+        
+        # Parse response
+        if response in ["NONE", "NO RELEVANT DOCUMENTS", ""]:
             return []
-        
-        # Check for empty input (including '""' case) and return all docs
-        if not user_input.strip() or user_input.strip() == '""' or user_input.strip() == "''":
-            print(f"Empty input detected, returning all {len(docs)} documents")
+        elif response == "ALL":
             return docs
-        
-        try:
-            docs_text = ""
-            for i, doc in enumerate(docs):
+        else:
+            # Parse indices
+            indices = []
+            for part in response.split(','):
                 try:
-                    # Truncate content to avoid token limits
-                    content_preview = doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content
-                    docs_text += f"Document {i+1}:\nContent: {content_preview}\nMetadata: {doc.metadata}\n\n"
-                except Exception as e:
-                    print(f"Error processing document {i}: {e}")
+                    idx = int(part.strip()) - 1  # Convert to 0-based
+                    if 0 <= idx < len(docs):
+                        indices.append(idx)
+                except ValueError:
                     continue
-        except Exception as e:
-            print(f"Error building docs text: {e}")
-            return docs  # Return all docs if building text fails
-        
-        try:
-            prompt = pull_prompt_from_langsmith("relevance-check-search-bar").format(
-                    user_input=user_input,
-                    search_kwargs=search_kwargs,
-                    docs_text=docs_text
-                )
-        except Exception as e:
-            print(f"Error pulling or formatting relevance prompt: {e}")
-            return docs  # Return all docs if prompt fails
-        
-        try:
-            response = llm_4o_mini.invoke(prompt)
-            result = response.content.strip()
             
-            # Parse the response
-            if result == "NONE":
-                return []
-            elif result == "ALL":
-                return docs
-            else:
-                # Parse comma-separated numbers
-                relevant_indices = []
-                try:
-                    indices = [int(x.strip()) - 1 for x in result.split(',') if x.strip().isdigit()]
-                    relevant_indices = [i for i in indices if 0 <= i < len(docs)]
-                except Exception as e:
-                    # If parsing fails, fall back to individual checks
-                    print(f"Failed to parse batch response: {result}, error: {e}")
-                    return docs  # Return all docs as fallback
-                
-                return [docs[i] for i in relevant_indices]
-                
-        except Exception as e:
-            print(f"LLM relevance check failed: {e}")
-            # Fallback to returning all docs
-            return docs
+            return [docs[i] for i in indices] if indices else []
             
-    except Exception as e:
-        print(f"Unexpected error in batch_relevance_filter: {e}")
-        return docs  # Return all docs as ultimate fallback
+    except Exception:
+        return docs

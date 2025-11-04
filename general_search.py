@@ -9,14 +9,16 @@ from llm_use import  handle_typo_errors, batch_relevance_filter
 
 try:
     embedding_function = HuggingFaceEmbeddings(model="intfloat/e5-large-v2")
-    vdb = Chroma(persist_directory="no_archive_db/", embedding_function=embedding_function)
+    full_vdb = Chroma(persist_directory="no_archive_db/", embedding_function=embedding_function)
+    spec_vdb = Chroma(persist_directory="specializations_db/", embedding_function=embedding_function)
 except Exception as e:
     print(f"Error initializing vector database: {e}")
-    vdb = None
+    full_vdb = None
+    spec_vdb = None
 
 def search(user_input: str, search_filter: str, school_ids: list, program_ids: list, more_flag: bool, is_filter_query: bool, filter_statements: list):
     
-    if vdb is None:
+    if full_vdb is None or spec_vdb is None:
         print("Vector database not initialized")
         return [], [], [], []
     
@@ -100,7 +102,11 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         print("===========================")
         
         try:
-            retriever = vdb.as_retriever(
+            full_retriever = full_vdb.as_retriever(
+                search_type="mmr",
+                search_kwargs=search_kwargs
+            )
+            spec_retriever = spec_vdb.as_retriever(
                 search_type="mmr",
                 search_kwargs=search_kwargs
             )
@@ -109,7 +115,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
             return [], [], [], []
 
         try:
-            rewritten_query = handle_typo_errors(user_input, search_kwargs)
+            rewritten_query = handle_typo_errors(user_input)
             print(f"Original query: {user_input}")
             print(f"Rewritten query: {rewritten_query}")
         except Exception as e:
@@ -139,7 +145,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                 document_filter = search_kwargs.get('where_document')
                 
                 content = hybrid_retrieve(
-                    vdb=vdb, 
+                    vdb=full_retriever, 
                     query=rewritten_query, 
                     k=k, 
                     filter=metadata_filter,
@@ -151,7 +157,8 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         else:
             # Use normal retriever for programs or all
             try:
-                content = retriever.invoke(rewritten_query)
+                content = full_retriever.invoke(rewritten_query)
+                content.extend(spec_retriever.invoke(rewritten_query))
                 print(f"Raw retriever returned {len(content)} documents")
             except Exception as e:
                 print(f"Error in retriever.invoke: {e}")
@@ -160,9 +167,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
 
         # Relevance filter
         try:
-            # Pass only metadata filters to relevance filter, not document filters
-            metadata_only_kwargs = {k: v for k, v in search_kwargs.items() if k != 'where_document'}
-            relevant_docs = batch_relevance_filter(rewritten_query, content, metadata_only_kwargs)
+            relevant_docs = batch_relevance_filter(rewritten_query, content)
             print(f"After relevance filtering: {len(relevant_docs)} documents")
         except Exception as e:
             print(f"Error in relevance filtering: {e}")
