@@ -17,7 +17,7 @@ except Exception as e:
 
 def search(user_input: str, search_filter: str, school_ids: list, program_ids: list, more_flag: bool, is_filter_query: bool, filter_statements: list):
     
-    total_start = time.time()  # Track total time
+    total_start = time.time()  
     
     if vdb is None:
         print("Vector database not initialized")
@@ -149,9 +149,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
             try:
                 print("Applying hybrid similarity + global rank sorting...")
                 if rewritten_query == '':
-                    k = 100  # Reduced from 1000
-                else:
-                    k = 15  # Reduced from 30
+                    k = 1000 
                 
                 # Extract filters properly for hybrid_retrieve
                 metadata_filter = search_kwargs.get('filter')
@@ -268,6 +266,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         print(f"Program IDs: {generated_program_ids}")
         
         print(f"🎯 TOTAL SEARCH TIME: {time.time() - total_start:.2f}s")
+        print(content)
         
         return return_docs, generated_school_ids, generated_program_ids, content
         
