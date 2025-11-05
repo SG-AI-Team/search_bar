@@ -42,7 +42,7 @@ def get_xai_llm():
 )
 
 llm_4o_mini = get_openai_llm()
-deepseek_llm = get_deepseek_llm
+deepseek_llm = get_deepseek_llm()
 llm_grok = get_xai_llm()
 
 
@@ -53,7 +53,7 @@ def handle_typo_errors(user_input: str, search_kwargs: list ):
         # Handle empty input early
         if not user_input.strip():
             return ""
-        
+                
         try:
             prompt = pull_prompt_from_langsmith("typo-error-handle-prompt-search-bar")
             print(search_kwargs)
@@ -62,9 +62,11 @@ def handle_typo_errors(user_input: str, search_kwargs: list ):
             return user_input  # Return original input if prompt fails
         
         try:
-            response = llm_grok.invoke(prompt.format(user_input=user_input, search_kwargs=search_kwargs)).content
-            print(response)
-            return response
+            response = deepseek_llm.invoke(prompt.format(user_input=user_input, search_kwargs=search_kwargs)).content
+            # Fix: Clean the response to ensure single line
+            cleaned_response = response.strip().split('\n')[0]  # Take only first line
+            print(cleaned_response)
+            return cleaned_response
         except Exception as e:
             print(f"Error in LLM typo correction: {e}")
             return user_input  # Return original input if LLM fails
