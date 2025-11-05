@@ -60,7 +60,7 @@ def handle_typo_errors(user_input: str):
             return user_input  # Return original input if prompt fails
         
         try:
-            response = deepseek_llm.invoke(prompt.format(user_input=user_input)).content
+            response = llm_4o_mini.invoke(prompt.format(user_input=user_input)).content
             # Fix: Clean the response to ensure single line
             cleaned_response = response.strip().split('\n')[0]  # Take only first line
             print(cleaned_response)
@@ -113,7 +113,7 @@ def batch_relevance_filter(user_input: str, docs: list):
             return docs  # Return all docs if prompt fails
         
         try:
-            response = deepseek_llm.invoke(prompt)
+            response = llm_4o_mini.invoke(prompt)
             result = response.content.strip()
             
             # Parse the response
