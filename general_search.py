@@ -9,7 +9,7 @@ from llm_use import  handle_typo_errors, batch_relevance_filter
 
 try:
     embedding_function = HuggingFaceEmbeddings(model="intfloat/e5-large-v2")
-    vdb = Chroma(persist_directory="no_archive_db/", embedding_function=embedding_function)
+    vdb = Chroma(persist_directory="combined_db_new/", embedding_function=embedding_function)
 except Exception as e:
     print(f"Error initializing vector database: {e}")
     vdb = None
