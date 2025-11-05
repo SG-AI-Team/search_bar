@@ -149,7 +149,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
             try:
                 print("Applying hybrid similarity + global rank sorting...")
                 if rewritten_query == '':
-                    k = 1000 
+                    k = 2000 
                 
                 # Extract filters properly for hybrid_retrieve
                 metadata_filter = search_kwargs.get('filter')
