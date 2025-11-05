@@ -9,23 +9,21 @@ from llm_use import  handle_typo_errors, batch_relevance_filter
 
 try:
     embedding_function = HuggingFaceEmbeddings(model="intfloat/e5-large-v2")
-    full_vdb = Chroma(persist_directory="no_archive_db/", embedding_function=embedding_function)
-    spec_vdb = Chroma(persist_directory="specializations_db/", embedding_function=embedding_function)
+    vdb = Chroma(persist_directory="no_archive_db/", embedding_function=embedding_function)
 except Exception as e:
     print(f"Error initializing vector database: {e}")
-    full_vdb = None
-    spec_vdb = None
+    vdb = None
 
 def search(user_input: str, search_filter: str, school_ids: list, program_ids: list, more_flag: bool, is_filter_query: bool, filter_statements: list):
     
-    if full_vdb is None or spec_vdb is None:
+    if vdb is None:
         print("Vector database not initialized")
         return [], [], [], []
     
     try:
         search_kwargs = {
-            "k": 15,  
-            "fetch_k": 30,  
+            "k": 30,  
+            "fetch_k": 60,  
             "lambda_mult": 0.4,
         }
         
@@ -70,11 +68,11 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         if more_flag == True:
             try:
                 if search_filter == 'schools':
-                    exclude_filter = exclude_ids(school_ids, [])
+                    exclude_filter = exclude_ids(school_ids, [], search_filter)
                 elif search_filter == 'programs':                
-                    exclude_filter = exclude_ids([], program_ids)
+                    exclude_filter = exclude_ids([], program_ids, search_filter)
                 else :
-                    exclude_filter = exclude_ids(school_ids, program_ids)
+                    exclude_filter = exclude_ids(school_ids, program_ids, search_filter)
                     
                 if exclude_filter:  
                     if 'filter' in search_kwargs:
@@ -86,8 +84,8 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         
         if is_filter_query == True:
             try:
-                # Fix: Define rewritten_query before using it
-                if 'rewritten_query' in locals() and rewritten_query != '':
+                # Fix: Define english_rewritten before using it
+                if 'english_rewritten' in locals() and english_rewritten != '':
                     not_exclude_filter_statments = not_exclude_ids(school_ids, program_ids)
                     if not_exclude_filter_statments:
                         if 'filter' in search_kwargs:
@@ -102,11 +100,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         print("===========================")
         
         try:
-            full_retriever = full_vdb.as_retriever(
-                search_type="mmr",
-                search_kwargs=search_kwargs
-            )
-            spec_retriever = spec_vdb.as_retriever(
+            retriever = vdb.as_retriever(
                 search_type="mmr",
                 search_kwargs=search_kwargs
             )
@@ -115,12 +109,14 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
             return [], [], [], []
 
         try:
-            rewritten_query = handle_typo_errors(user_input)
+            english_rewritten, french_rewritten = handle_typo_errors(user_input, search_kwargs)
             print(f"Original query: {user_input}")
-            print(f"Rewritten query: {rewritten_query}")
+            print(f"Rewritten query (English): {english_rewritten}")
+            print(f"Rewritten query (French): {french_rewritten}")
         except Exception as e:
             print(f"Error in typo correction: {e}")
-            rewritten_query = user_input  # Use original query as fallback
+            english_rewritten = user_input  # Use original query as fallback
+            french_rewritten = user_input
 
         try:
             school_parent_data = read_json("school_parent_json.json")
@@ -135,7 +131,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         if search_filter == 'schools':
             try:
                 print("Applying hybrid similarity + global rank sorting...")
-                if rewritten_query == '':
+                if english_rewritten == '':
                     k = 1000
                 else:
                     k = 30 
@@ -145,8 +141,8 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                 document_filter = search_kwargs.get('where_document')
                 
                 content = hybrid_retrieve(
-                    vdb=full_retriever, 
-                    query=rewritten_query, 
+                    vdb=vdb, 
+                    query=english_rewritten, 
                     k=k, 
                     filter=metadata_filter,
                     where_document=document_filter
@@ -157,8 +153,8 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         else:
             # Use normal retriever for programs or all
             try:
-                content = full_retriever.invoke(rewritten_query)
-                content.extend(spec_retriever.invoke(rewritten_query))
+                content = retriever.invoke(english_rewritten)
+                content.extend(retriever.invoke(french_rewritten))
                 print(f"Raw retriever returned {len(content)} documents")
             except Exception as e:
                 print(f"Error in retriever.invoke: {e}")
@@ -167,7 +163,9 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
 
         # Relevance filter
         try:
-            relevant_docs = batch_relevance_filter(rewritten_query, content)
+            # Pass only metadata filters to relevance filter, not document filters
+            metadata_only_kwargs = {k: v for k, v in search_kwargs.items() if k != 'where_document'}
+            relevant_docs = batch_relevance_filter(english_rewritten, content, metadata_only_kwargs)
             print(f"After relevance filtering: {len(relevant_docs)} documents")
         except Exception as e:
             print(f"Error in relevance filtering: {e}")

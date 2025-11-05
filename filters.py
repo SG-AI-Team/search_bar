@@ -1,14 +1,13 @@
 from typing import Optional
-def exclude_ids(school_ids, program_ids):
+def exclude_ids(school_ids, program_ids, search_filter):
     filter_conditions = []
     
-    if len(school_ids) > 1:
+    if len(school_ids) > 1 and search_filter == 'schools':
         filter_conditions.append({"school_id": {"$nin": school_ids}})
     
     elif len(school_ids) == 1:
         filter_conditions.append({"school_id": {"$in": school_ids}})
 
-    
     if program_ids:
         filter_conditions.append({"program_id": {"$nin": program_ids}})
     

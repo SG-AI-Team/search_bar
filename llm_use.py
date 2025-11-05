@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import functools
 from langsmith import Client
 import os 
+import ast
 
 def pull_prompt_from_langsmith(prompt_name: str):
     """Pull prompt from LangSmith hub"""
@@ -47,7 +48,7 @@ llm_grok = get_xai_llm()
 
 
 
-def handle_typo_errors(user_input: str):
+def handle_typo_errors(user_input: str, search_kwargs: list ):
     try:
         # Handle empty input early
         if not user_input.strip():
@@ -55,14 +56,18 @@ def handle_typo_errors(user_input: str):
         
         try:
             prompt = pull_prompt_from_langsmith("typo-error-handle-prompt-search-bar")
+            print(search_kwargs)
         except Exception as e:
             print(f"Error pulling prompt: {e}")
             return user_input  # Return original input if prompt fails
         
         try:
-            response = llm_grok.invoke(prompt.format(user_input=user_input)).content
+            response = llm_grok.invoke(prompt.format(user_input=user_input, search_kwargs=search_kwargs)).content
+            parsed_response = ast.literal_eval(response)
+            english_response = parsed_response[0]
+            french_response = parsed_response[1]
             print(response)
-            return response
+            return english_response, french_response
         except Exception as e:
             print(f"Error in LLM typo correction: {e}")
             return user_input  # Return original input if LLM fails
@@ -71,49 +76,72 @@ def handle_typo_errors(user_input: str):
         print(f"Unexpected error in handle_typo_errors: {e}")
         return user_input
 
-def batch_relevance_filter(user_input: str, docs: list):
-    """Filter documents for relevance using LLM"""
-    # Handle edge cases
-    if not docs or not user_input.strip():
-        return docs
-    
+def batch_relevance_filter(user_input: str, docs: list, search_kwargs: dict):
+    """
+    Filter a list of documents for relevance in a single LLM call.
+    Returns only the relevant documents.
+    """
     try:
-        # Get prompt and format documents
-        prompt_template = pull_prompt_from_langsmith("relevance-check-search-bar")
-        if not prompt_template:
-            return docs
+        print(f"DEBUG: batch_relevance_filter called with user_input='{user_input}', len(docs)={len(docs)}")
+        print(f"DEBUG: user_input.strip()='{user_input.strip()}', bool check={not user_input.strip()}")
         
-        # Convert docs to numbered text
-        docs_text = []
-        for i, doc in enumerate(docs, 1):
-            content = getattr(doc, 'page_content', str(doc))
-            docs_text.append(f"{i}. {content}")
-        
-        # Call LLM
-        prompt = prompt_template.format(
-            user_input=user_input.strip(),
-            docs_text=docs_text
-        )
-        
-        response = llm_grok.invoke(prompt).content.strip().upper()
-        
-        # Parse response
-        if response in ["NONE", "NO RELEVANT DOCUMENTS", ""]:
+        if not docs:
             return []
-        elif response == "ALL":
+        
+        # Check for empty input (including '""' case) and return all docs
+        if not user_input.strip() or user_input.strip() == '""' or user_input.strip() == "''":
+            print(f"Empty input detected, returning all {len(docs)} documents")
             return docs
-        else:
-            # Parse indices
-            indices = []
-            for part in response.split(','):
+        
+        try:
+            docs_text = ""
+            for i, doc in enumerate(docs):
                 try:
-                    idx = int(part.strip()) - 1  # Convert to 0-based
-                    if 0 <= idx < len(docs):
-                        indices.append(idx)
-                except ValueError:
+                    docs_text += f"Document {i+1}:\nContent: {doc.page_content}\nMetadata: {doc.metadata}\n\n"
+                except Exception as e:
+                    print(f"Error processing document {i}: {e}")
                     continue
+        except Exception as e:
+            print(f"Error building docs text: {e}")
+            return docs  # Return all docs if building text fails
+        
+        try:
+            prompt = pull_prompt_from_langsmith("relevance-check-search-bar").format(
+                    user_input=user_input,
+                    search_kwargs=search_kwargs,
+                    docs_text=docs_text
+                )
+        except Exception as e:
+            print(f"Error pulling or formatting relevance prompt: {e}")
+            return docs  # Return all docs if prompt fails
+        
+        try:
+            response = llm_grok.invoke(prompt)
+            result = response.content.strip()
             
-            return [docs[i] for i in indices] if indices else []
+            # Parse the response
+            if result == "NONE":
+                return []
+            elif result == "ALL":
+                return docs
+            else:
+                # Parse comma-separated numbers
+                relevant_indices = []
+                try:
+                    indices = [int(x.strip()) - 1 for x in result.split(',') if x.strip().isdigit()]
+                    relevant_indices = [i for i in indices if 0 <= i < len(docs)]
+                except Exception as e:
+                    # If parsing fails, fall back to individual checks
+                    print(f"Failed to parse batch response: {result}, error: {e}")
+                    return docs  # Return all docs as fallback
+                
+                return [docs[i] for i in relevant_indices]
+                
+        except Exception as e:
+            print(f"LLM relevance check failed: {e}")
+            # Fallback to returning all docs
+            return docs
             
-    except Exception:
-        return docs
+    except Exception as e:
+        print(f"Unexpected error in batch_relevance_filter: {e}")
+        return docs  # Return all docs as ultimate fallback
