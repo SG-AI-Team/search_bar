@@ -22,7 +22,7 @@ load_dotenv()
 @functools.lru_cache(maxsize=1)
 def get_openai_llm():
     return ChatOpenAI(
-        model="gpt-4o-mini",
+        model="gpt-4.1-mini",
         temperature=0.0,
     )
 @functools.lru_cache(maxsize=1)
@@ -131,7 +131,7 @@ def batch_relevance_filter(user_input: str, docs: list):
                     # If parsing fails, fall back to individual checks
                     print(f"Failed to parse batch response: {result}, error: {e}")
                     return docs  # Return all docs as fallback
-                
+                print([docs[i] for i in relevant_indices])
                 return [docs[i] for i in relevant_indices]
                 
         except Exception as e:
