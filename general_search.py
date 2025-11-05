@@ -125,7 +125,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                 rewritten_query = user_input
                 print("Skipped typo correction for short/empty query")
             else:
-                rewritten_query = handle_typo_errors(user_input, search_kwargs)
+                rewritten_query = handle_typo_errors(user_input)
             print(f"Original query: {user_input}")
             print(f"Rewritten query: {rewritten_query}")
         except Exception as e:
@@ -148,6 +148,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         if search_filter == 'schools':
             try:
                 print("Applying hybrid similarity + global rank sorting...")
+                k = search_kwargs.get('k', 15)  
                 if rewritten_query == '':
                     k = 2000 
                 
@@ -185,7 +186,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
             else:
                 # Pass only metadata filters to relevance filter, not document filters
                 metadata_only_kwargs = {k: v for k, v in search_kwargs.items() if k != 'where_document'}
-                relevant_docs = batch_relevance_filter(rewritten_query, content, metadata_only_kwargs)
+                relevant_docs = batch_relevance_filter(rewritten_query, content)
             print(f"After relevance filtering: {len(relevant_docs)} documents")
         except Exception as e:
             print(f"Error in relevance filtering: {e}")
