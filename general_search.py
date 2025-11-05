@@ -84,8 +84,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         
         if is_filter_query == True:
             try:
-                # Fix: Define english_rewritten before using it
-                if 'english_rewritten' in locals() and english_rewritten != '':
+                if 'rewritten_query' in locals() and rewritten_query != '':
                     not_exclude_filter_statments = not_exclude_ids(school_ids, program_ids)
                     if not_exclude_filter_statments:
                         if 'filter' in search_kwargs:
@@ -109,14 +108,12 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
             return [], [], [], []
 
         try:
-            english_rewritten, french_rewritten = handle_typo_errors(user_input, search_kwargs)
+            rewritten_query = handle_typo_errors(user_input, search_kwargs)
             print(f"Original query: {user_input}")
-            print(f"Rewritten query (English): {english_rewritten}")
-            print(f"Rewritten query (French): {french_rewritten}")
+            print(f"Rewritten query (English): {rewritten_query}")
         except Exception as e:
             print(f"Error in typo correction: {e}")
-            english_rewritten = user_input  # Use original query as fallback
-            french_rewritten = user_input
+            rewritten_query = user_input  
 
         try:
             school_parent_data = read_json("school_parent_json.json")
@@ -131,7 +128,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         if search_filter == 'schools':
             try:
                 print("Applying hybrid similarity + global rank sorting...")
-                if english_rewritten == '':
+                if rewritten_query == '':
                     k = 1000
                 else:
                     k = 30 
@@ -142,7 +139,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                 
                 content = hybrid_retrieve(
                     vdb=vdb, 
-                    query=english_rewritten, 
+                    query=rewritten_query, 
                     k=k, 
                     filter=metadata_filter,
                     where_document=document_filter
@@ -153,8 +150,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         else:
             # Use normal retriever for programs or all
             try:
-                content = retriever.invoke(english_rewritten)
-                content.extend(retriever.invoke(french_rewritten))
+                content = retriever.invoke(rewritten_query)
                 print(f"Raw retriever returned {len(content)} documents")
             except Exception as e:
                 print(f"Error in retriever.invoke: {e}")
@@ -165,7 +161,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         try:
             # Pass only metadata filters to relevance filter, not document filters
             metadata_only_kwargs = {k: v for k, v in search_kwargs.items() if k != 'where_document'}
-            relevant_docs = batch_relevance_filter(english_rewritten, content, metadata_only_kwargs)
+            relevant_docs = batch_relevance_filter(rewritten_query, content, metadata_only_kwargs)
             print(f"After relevance filtering: {len(relevant_docs)} documents")
         except Exception as e:
             print(f"Error in relevance filtering: {e}")

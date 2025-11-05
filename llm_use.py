@@ -63,11 +63,8 @@ def handle_typo_errors(user_input: str, search_kwargs: list ):
         
         try:
             response = llm_grok.invoke(prompt.format(user_input=user_input, search_kwargs=search_kwargs)).content
-            parsed_response = ast.literal_eval(response)
-            english_response = parsed_response[0]
-            french_response = parsed_response[1]
             print(response)
-            return english_response, french_response
+            return response
         except Exception as e:
             print(f"Error in LLM typo correction: {e}")
             return user_input  # Return original input if LLM fails
@@ -97,7 +94,8 @@ def batch_relevance_filter(user_input: str, docs: list, search_kwargs: dict):
             docs_text = ""
             for i, doc in enumerate(docs):
                 try:
-                    docs_text += f"Document {i+1}:\nContent: {doc.page_content}\nMetadata: {doc.metadata}\n\n"
+                    content_preview = doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content
+                    docs_text += f"Document {i+1}:\nContent: {content_preview}\nMetadata: {doc.metadata}\n\n"
                 except Exception as e:
                     print(f"Error processing document {i}: {e}")
                     continue
