@@ -1,3 +1,4 @@
+import time
 from langchain_openai import ChatOpenAI
 from langchain_deepseek import ChatDeepSeek
 from langchain_xai import ChatXAI
@@ -5,6 +6,20 @@ from dotenv import load_dotenv
 import functools
 from langsmith import Client
 import os 
+import json
+
+def serialize_docs(docs):
+    serialized = []
+    for d in docs:
+        content = d.page_content
+        doc_info = {
+            "id": d.id,
+            "metadata": d.metadata,
+            "page_content": content
+        }
+        serialized.append(doc_info)
+    return json.dumps(serialized, ensure_ascii=False)
+
 
 def pull_prompt_from_langsmith(prompt_name: str):
     """Pull prompt from LangSmith hub"""
@@ -19,12 +34,14 @@ def pull_prompt_from_langsmith(prompt_name: str):
 load_dotenv()
 
 
-@functools.lru_cache(maxsize=1)
-def get_openai_llm():
-    return ChatOpenAI(
-        model="gpt-4.1-mini",
-        temperature=0.0,
-    )
+# @functools.lru_cache(maxsize=1)
+# def get_openai_llm():
+#     return ChatOpenAI(
+#         model="gpt-4.1-mini",  # Fix: was "gpt-4.1-mini" which doesn't exist
+#         temperature=0.0,
+#         top_p=0.0,
+#         seed=42,  # Add seed for reproducibility
+#     )
 @functools.lru_cache(maxsize=1)
 def get_deepseek_llm():
     return ChatDeepSeek(
@@ -40,7 +57,11 @@ def get_xai_llm():
     temperature=0.0,
 )
 
-llm_4o_mini = get_openai_llm()
+llm_41_mini = ChatOpenAI(
+        model="gpt-4.1-mini",  
+        temperature=0.0,
+        top_p=0.0,
+    )
 deepseek_llm = get_deepseek_llm()
 llm_grok = get_xai_llm()
 
@@ -60,7 +81,7 @@ def handle_typo_errors(user_input: str):
             return user_input  # Return original input if prompt fails
         
         try:
-            response = llm_4o_mini.invoke(prompt.format(user_input=user_input)).content
+            response = llm_41_mini.invoke(prompt.format(user_input=user_input)).content
             # Fix: Clean the response to ensure single line
             cleaned_response = response.strip().split('\n')[0]  # Take only first line
             print(cleaned_response)
@@ -72,73 +93,119 @@ def handle_typo_errors(user_input: str):
     except Exception as e:
         print(f"Unexpected error in handle_typo_errors: {e}")
         return user_input
+    
 
-def batch_relevance_filter(user_input: str, docs: list):
-    """
-    Filter a list of documents for relevance in a single LLM call.
-    Returns only the relevant documents.
-    """
+def extract_fields(rewritten_query: str):
+    start_time = time.time()
+    
+    prompt = pull_prompt_from_langsmith("fields_extraction_search_bar")
+    response = llm_41_mini.invoke(prompt.format(rewritten_query=rewritten_query)).content
+
+    end_time = time.time()
+    execution_time = end_time - start_time
+    
+    print(f"Field extraction took: {execution_time:.4f} seconds")
+    
+    return response
+
+
+def batch_relevance_filter(rewritten_query: str, docs: list):
+    if not docs:
+        print("🔍 DEBUG: No documents provided to filter")
+        return []
+
+    if not rewritten_query.strip() or rewritten_query.strip() in ['""', "''"]:
+        print("🔍 DEBUG: Empty query, returning all documents")
+        return docs
+
     try:
-        print(f"DEBUG: batch_relevance_filter called with user_input='{user_input}', len(docs)={len(docs)}")
-        print(f"DEBUG: user_input.strip()='{user_input.strip()}', bool check={not user_input.strip()}")
+        # Document order verification first
+        print("🔍 DEBUG: Document order verification:")
+        for i, doc in enumerate(docs):
+            program_id = doc.metadata.get('program_id', 'unknown')
+            specialization = doc.metadata.get('specialization', 'none')
+            parent = doc.metadata.get('parent_program', 'none')
+            title = doc.page_content.split('\n')[1] if '\n' in doc.page_content else 'unknown'
+            print(f"Index {i}: Program ID {program_id} | Spec: {specialization} | Parent: {parent} | Title: {title}")
         
-        if not docs:
+        fields = extract_fields(rewritten_query)
+        print(f"🔍 DEBUG: Extracted fields: {fields}")
+        
+        prompt_template = pull_prompt_from_langsmith("relevance-check-search-bar")
+        prompt = prompt_template.format(json=fields, data=docs)
+        
+        # Hash the prompt to compare with LangSmith
+        import hashlib
+        prompt_hash = hashlib.md5(prompt.encode()).hexdigest()
+        print(f"🔍 DEBUG: Prompt hash: {prompt_hash}")
+        
+        print("🔍 DEBUG: ============ PROMPT SENT TO LLM ============")
+        print(prompt)
+        print("🔍 DEBUG: ============ END OF PROMPT ============")
+        
+        # Force more deterministic behavior
+        response = llm_41_mini.invoke(
+            prompt,
+            config={
+                "temperature": 0.0,
+                "top_p": 0.0,
+                "seed": 42,  # Add seed for reproducibility
+            }
+        )
+        result = response.content.strip()
+        
+        print(f"🔍 DEBUG: ============ LLM RAW RESPONSE ============")
+        print(f"'{result}'")
+        print(f"🔍 DEBUG: Response type: {type(result)}")
+        print(f"🔍 DEBUG: Response length: {len(result)}")
+        print("🔍 DEBUG: ============ END OF LLM RESPONSE ============")
+
+        # Add manual verification for the expected indices
+        expected_indices = [1, 3, 7]  # Based on your LangSmith results
+        print(f"🔍 DEBUG: Expected indices from LangSmith: {expected_indices}")
+        print(f"🔍 DEBUG: Expected programs: {[docs[i].metadata.get('program_id') for i in expected_indices if i < len(docs)]}")
+
+        if result.upper() == "ALL":
+            print("🔍 DEBUG: LLM returned 'ALL', returning all documents")
+            return docs
+        elif result in ["NONE", "[]", "null"]:
+            print("🔍 DEBUG: LLM returned 'NONE/[]/null', returning empty list")
             return []
-        
-        # Check for empty input (including '""' case) and return all docs
-        if not user_input.strip() or user_input.strip() == '""' or user_input.strip() == "''":
-            print(f"Empty input detected, returning all {len(docs)} documents")
-            return docs
-        
-        try:
-            docs_text = ""
-            for i, doc in enumerate(docs):
-                try:
-                    content_preview = doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content
-                    docs_text += f"Document {i+1}:\nContent: {content_preview}\nMetadata: {doc.metadata}\n\n"
-                except Exception as e:
-                    print(f"Error processing document {i}: {e}")
-                    continue
-        except Exception as e:
-            print(f"Error building docs text: {e}")
-            return docs  # Return all docs if building text fails
-        
-        try:
-            prompt = pull_prompt_from_langsmith("relevance-check-search-bar").format(
-                    user_input=user_input,
-                    docs_text=docs_text
-                )
-        except Exception as e:
-            print(f"Error pulling or formatting relevance prompt: {e}")
-            return docs  # Return all docs if prompt fails
-        
-        try:
-            response = llm_4o_mini.invoke(prompt)
-            result = response.content.strip()
+
+        # Handle parsing
+        if result.startswith('[') and result.endswith(']'):
+            print("🔍 DEBUG: Parsing as Python list format")
+            indices = json.loads(result)
+        else:
+            print("🔍 DEBUG: Parsing as comma-separated format")
+            indices = [int(x.strip()) for x in result.split(',')]
             
-            # Parse the response
-            if result == "NONE":
-                return []
-            elif result == "ALL":
-                return docs
+        print(f"🔍 DEBUG: Parsed indices: {indices}")
+        print(f"🔍 DEBUG: Total documents available: {len(docs)}")
+        
+        # Compare with expected
+        if indices != expected_indices:
+            print(f"🔍 DEBUG: ⚠️  MISMATCH! Expected {expected_indices} but got {indices}")
+            print("🔍 DEBUG: Difference analysis:")
+            for i, (expected, actual) in enumerate(zip(expected_indices, indices)):
+                if expected != actual:
+                    print(f"  Position {i}: Expected {expected} (Program {docs[expected].metadata.get('program_id') if expected < len(docs) else 'OOB'})")
+                    print(f"  Position {i}: Got {actual} (Program {docs[actual].metadata.get('program_id') if actual < len(docs) else 'OOB'})")
+        
+        # Handle indices
+        filtered_docs = []
+        for idx in indices:
+            if 0 <= idx < len(docs):
+                filtered_docs.append(docs[idx])
+                print(f"🔍 DEBUG: Added document {idx}: {docs[idx].metadata.get('program_id', 'unknown')}")
             else:
-                # Parse comma-separated numbers
-                relevant_indices = []
-                try:
-                    indices = [int(x.strip()) - 1 for x in result.split(',') if x.strip().isdigit()]
-                    relevant_indices = [i for i in indices if 0 <= i < len(docs)]
-                except Exception as e:
-                    # If parsing fails, fall back to individual checks
-                    print(f"Failed to parse batch response: {result}, error: {e}")
-                    return docs  # Return all docs as fallback
-                print([docs[i] for i in relevant_indices])
-                return [docs[i] for i in relevant_indices]
+                print(f"🔍 DEBUG: WARNING - Index {idx} out of range (0-{len(docs)-1})")
                 
-        except Exception as e:
-            print(f"LLM relevance check failed: {e}")
-            # Fallback to returning all docs
-            return docs
-            
+        print(f"🔍 DEBUG: Final filtered documents count: {len(filtered_docs)}")
+        return filtered_docs
+        
     except Exception as e:
-        print(f"Unexpected error in batch_relevance_filter: {e}")
-        return docs  # Return all docs as ultimate fallback
+        print(f"🔍 DEBUG: ERROR in batch_relevance_filter: {e}")
+        import traceback
+        traceback.print_exc()
+        return docs
