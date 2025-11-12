@@ -1,4 +1,3 @@
-from typing import Optional
 def exclude_ids(school_ids, program_ids, search_filter):
     filter_conditions = []
     
@@ -165,3 +164,23 @@ def filters(filter_statements):
                 filter_conditions.append({"where_document": {"$or": or_conditions}})
     
     return filter_conditions
+
+def internal_filters(extracted_fields: dict):
+    filter_conditions = []
+    # filter_conditions.append({"program_degree": {"$in": extracted_fields['degree_level']}})
+    if 'is_double_diploma' in extracted_fields and extracted_fields['is_double_diploma'] is not None:
+        # Convert boolean to string since metadata stores it as string
+        is_double_diploma_str = 'True' if extracted_fields['is_double_diploma'] else 'False'
+        if is_double_diploma_str  == 'True':
+            filter_conditions.append({
+                "is_double_diploma": {"$in": [is_double_diploma_str]}
+            })
+        else:
+            filter_conditions.append({
+                "is_double_diploma": {"$nin": [is_double_diploma_str]}
+                })
+            
+            
+
+    return filter_conditions
+    
