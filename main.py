@@ -33,80 +33,61 @@ class SearchResponse(BaseModel):
 @app.post("/search", response_model=SearchResponse)
 async def search_endpoint(request: SearchRequest):
     if request.more_flag == False:
-        try:
-            results1, school_ids1, program_ids1, content1 = search(
-                user_input=request.user_input,
-                search_filter=request.search_filter,
-                school_ids=request.school_ids,
-                program_ids=request.program_ids,
-                more_flag=False,
-                is_filter_query=request.is_filter_query,
-                filter_statements=request.filter_statements,
-            )
-            
-            results2, school_ids2, program_ids2, content2 = search(
-                user_input=request.user_input,
-                search_filter=request.search_filter,
-                school_ids=school_ids1,
-                program_ids=program_ids1,
-                more_flag=True,
-                is_filter_query=request.is_filter_query,
-                filter_statements=request.filter_statements,
-            )
-            
-            search_result1 = SearchResult(
-                results=results1,
-                generated_school_ids=school_ids1,
-                generated_program_ids=program_ids1
-            )
-            
-            search_result2 = SearchResult(
-                results=results2,
-                generated_school_ids=school_ids2,
-                generated_program_ids=program_ids2
-            )
-            
-            return SearchResponse(search_results=[search_result1, search_result2])
-            
-        except Exception as e:
-            from fastapi import HTTPException
-            raise HTTPException(status_code=500, detail=str(e))
+        # First search without exclusions
+        results1, school_ids1, program_ids1, content1 = search(
+            user_input=request.user_input,
+            search_filter=request.search_filter,
+            school_ids=request.school_ids,
+            program_ids=request.program_ids,
+            more_flag=request.more_flag,
+            is_filter_query=request.is_filter_query,
+            filter_statements=request.filter_statements,
+        )
+        
+        # Second search excluding results from first search
+        results2, school_ids2, program_ids2, content2 = search(
+            user_input=request.user_input,
+            search_filter=request.search_filter,
+            school_ids=school_ids1,
+            program_ids=program_ids1,
+            more_flag=True,
+            is_filter_query=request.is_filter_query,
+            filter_statements=request.filter_statements,
+        )
     else:
-        try:
-            results1, school_ids1, program_ids1, content1 = search(
-                user_input=request.user_input,
-                search_filter=request.search_filter,
-                school_ids=request.school_ids,
-                program_ids=request.program_ids,
-                more_flag=True,
-                is_filter_query=request.is_filter_query,
-                filter_statements=request.filter_statements,
-            )
-            
-            results2, school_ids2, program_ids2, content2 = search(
-                user_input=request.user_input,
-                search_filter=request.search_filter,
-                school_ids=school_ids1,
-                program_ids=request.program_ids + program_ids1,
-                more_flag=True,
-                is_filter_query=request.is_filter_query,
-                filter_statements=request.filter_statements,
-            )
-            
-            search_result1 = SearchResult(
-                results=results1,
-                generated_school_ids=school_ids1,
-                generated_program_ids=program_ids1
-            )
-            
-            search_result2 = SearchResult(
-                results=results2,
-                generated_school_ids=school_ids2,
-                generated_program_ids=program_ids2
-            )
-            
-            return SearchResponse(search_results=[search_result1, search_result2])
-            
-        except Exception as e:
-            from fastapi import HTTPException
-            raise HTTPException(status_code=500, detail=str(e))
+        # When more_flag=True initially, we want to get results that are NOT in the provided IDs
+        results1, school_ids1, program_ids1, content1 = search(
+            user_input=request.user_input,
+            search_filter=request.search_filter,
+            school_ids=request.school_ids,
+            program_ids=request.program_ids,
+            more_flag=True,
+            is_filter_query=request.is_filter_query,
+            filter_statements=request.filter_statements,
+        )
+        
+        # Second search should return empty results if all programs are excluded
+        # OR use a different approach like relaxing filters
+        results2, school_ids2, program_ids2, content2 = search(
+            user_input=request.user_input,
+            search_filter=request.search_filter,
+            school_ids=[],  # Don't exclude any schools
+            program_ids=request.program_ids + program_ids1,  # Exclude both original + newly found
+            more_flag=True,
+            is_filter_query=request.is_filter_query,
+            filter_statements=request.filter_statements,
+        )
+    
+    search_result1 = SearchResult(
+        results=results1,
+        generated_school_ids=school_ids1,
+        generated_program_ids=program_ids1
+    )
+    
+    search_result2 = SearchResult(
+        results=results2,
+        generated_school_ids=school_ids2,
+        generated_program_ids=program_ids2
+    )
+    
+    return SearchResponse(search_results=[search_result1, search_result2])

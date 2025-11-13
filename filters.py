@@ -5,17 +5,11 @@ def exclude_ids(school_ids, program_ids, search_filter):
             filter_conditions.append({"school_id": {"$nin": school_ids}})  
     elif search_filter == 'programs':
         if program_ids:
-            # Convert string IDs to match DB format if needed
-            try:
-                program_ids_converted = [int(pid) if isinstance(pid, str) and pid.isdigit() else pid for pid in program_ids]
-            except:
-                program_ids_converted = program_ids
-            
             if len(school_ids) == 1:
                 filter_conditions.append({"school_id": {"$in": school_ids}})
-                filter_conditions.append({"program_id": {"$nin": program_ids_converted}})
+                filter_conditions.append({"program_id": {"$nin": program_ids}})
             else:
-                filter_conditions.append({"program_id": {"$nin": program_ids_converted}})
+                filter_conditions.append({"program_id": {"$nin": program_ids}})
     else:
         if program_ids:
             filter_conditions.append({"program_id": {"$nin": program_ids}})
@@ -186,6 +180,6 @@ def internal_filters(extracted_fields: dict):
             filter_conditions.append({"is_double_diploma": {"$eq": "True"}})
         else:
             # Show only non-double diploma programs
-            filter_conditions.append({"is_double_diploma": {"$ne": "False"}})
+            filter_conditions.append({"is_double_diploma": {"$ne": "True"}})
     return filter_conditions
     

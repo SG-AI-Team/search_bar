@@ -50,9 +50,11 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         print(f"🔍 Metadata filters: {metadata_filters}")
         print(f"🔍 Document filters: {document_filters}")
         
+        # Apply internal filters
         if metadata_filters:
             search_kwargs['filter'] = {"$and": metadata_filters} if len(metadata_filters) > 1 else metadata_filters[0]
 
+        # Apply user filter statements
         if filter_statements:
             try:
                 user_filters = filters(filter_statements)
@@ -71,10 +73,11 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
             except Exception:
                 pass
         
+        # Apply exclusion filters (more_flag logic)
         if more_flag:
             try:
-                print(f"🔍 Input - school_ids: {school_ids}, program_ids: {program_ids[:10]}... (showing first 10)")
-                print(f"🔍 Input - search_filter: {search_filter}, program_ids count: {len(program_ids)}")
+                print(f"🔍 Input - school_ids: {school_ids}, program_ids: {program_ids[:10] if program_ids else []}... (showing first 10)")
+                print(f"🔍 Input - search_filter: {search_filter}, program_ids count: {len(program_ids) if program_ids else 0}")
                 
                 if search_filter == 'schools':
                     exclude_filter = exclude_ids(school_ids, [], search_filter)
@@ -86,10 +89,10 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                 print(f"🔍 Exclude filter generated: {exclude_filter}")
                 
                 # Check if program_ids are being truncated
-                if 'program_id' in str(exclude_filter):
+                if exclude_filter and 'program_id' in str(exclude_filter):
                     import re
-                    nin_ids = re.findall(r'"(\d+)"', str(exclude_filter))
-                    print(f"🔍 Program IDs in filter: {len(nin_ids)} out of {len(program_ids)}")
+                    nin_ids = re.findall(r'\d+', str(exclude_filter))
+                    print(f"🔍 Program IDs in filter: {len(nin_ids)} out of {len(program_ids) if program_ids else 0}")
                 
                 if exclude_filter:  
                     if 'filter' in search_kwargs:
@@ -101,6 +104,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                 print(f"❌ Error in exclusion logic: {e}")
                 pass
         
+        # Apply inclusion filters (is_filter_query logic)
         if is_filter_query:
             try:
                 if rewritten_query and rewritten_query.strip():
@@ -113,15 +117,6 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
             except Exception:
                 pass
         
-        # Create retriever
-        try:
-            retriever = vdb.as_retriever(
-                search_type="mmr",
-                search_kwargs=search_kwargs
-            )
-        except Exception:
-            return [], [], [], []
-
         # Load parent data
         try:
             school_parent_data = read_json("school_parent_json.json")
@@ -129,7 +124,9 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         except Exception:
             return [], [], [], []
 
-        # Vector search
+        print(f"🔍 Final search_kwargs: {json.dumps(search_kwargs, indent=2, default=str)}")
+
+        # Vector search with proper filter application
         if search_filter == 'schools':
             try:
                 k = search_kwargs.get('k', 15)  
@@ -141,26 +138,39 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                 
                 content = hybrid_retrieve(
                     vdb=vdb, 
-                    query=rewritten_query, 
+                    query=rewritten_query if rewritten_query.strip() else "schools", 
                     k=k, 
                     filter=metadata_filter,
                     where_document=document_filter
                 )
-            except Exception:
+            except Exception as e:
+                print(f"❌ Error in school search: {e}")
                 return [], [], [], []
         else:
             try:
-                content = retriever.invoke(rewritten_query)
-            except Exception:
+                # FIX: Create retriever AFTER all filters are applied
+                retriever = vdb.as_retriever(
+                    search_type="mmr",
+                    search_kwargs=search_kwargs  # Now contains all filters including exclusions
+                )
+                
+                # Use default query for empty searches
+                query_to_use = rewritten_query if rewritten_query.strip() else "programs"
+                content = retriever.invoke(query_to_use)
+                
+            except Exception as e:
+                print(f"❌ Error in program search: {e}")
                 return [], [], [], []
 
         # Relevance filtering
         try:
             if not rewritten_query or not rewritten_query.strip() or len(rewritten_query.strip()) < 3:
+                print("🔍 Skipping relevance filtering for empty/short query")
                 relevant_docs = content
             else:
                 relevant_docs = batch_relevance_filter(rewritten_query, content, extracted_fields)
-        except Exception:
+        except Exception as e:
+            print(f"❌ Error in relevance filtering: {e}")
             relevant_docs = content
 
         # Process documents
@@ -169,7 +179,8 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         generated_program_ids = []
         unique_school_ids = set() 
         unique_program_ids = set()
-        print(f"🔍 Final search_kwargs: {json.dumps(search_kwargs, indent=2, default=str)}")
+        
+        print(f"🔍 Processing {len(relevant_docs)} relevant documents")
         
         try:
             for doc in relevant_docs:
@@ -179,39 +190,44 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
 
                     if search_filter == 'schools':
                         if school_id and school_id not in unique_school_ids:
-                            school_data = school_parent_data.get(school_id)
+                            school_data = school_parent_data.get(str(school_id))
                             if school_data:
                                 return_docs.append(school_data)
-                                generated_school_ids.append(school_id)
+                                generated_school_ids.append(str(school_id))
                                 unique_school_ids.add(school_id)
 
                     elif search_filter == 'programs':
                         if program_id and program_id not in unique_program_ids:
-                            program_data = program_parent_data.get(program_id)
+                            program_data = program_parent_data.get(str(program_id))
                             if program_data:
                                 return_docs.append(program_data)
-                                generated_program_ids.append(program_id)
+                                generated_program_ids.append(str(program_id))
                                 unique_program_ids.add(program_id)
                             
                     else:  # search_filter == 'all'
                         if school_id and school_id not in unique_school_ids:
-                            school_data = school_parent_data.get(school_id)
+                            school_data = school_parent_data.get(str(school_id))
                             if school_data:
                                 return_docs.append(school_data)
-                                generated_school_ids.append(school_id)
+                                generated_school_ids.append(str(school_id))
                                 unique_school_ids.add(school_id)
                         
                         if program_id and program_id not in unique_program_ids:
-                            program_data = program_parent_data.get(program_id)
+                            program_data = program_parent_data.get(str(program_id))
                             if program_data:
                                 return_docs.append(program_data)
-                                generated_program_ids.append(program_id)
+                                generated_program_ids.append(str(program_id))
                                 unique_program_ids.add(program_id)
-                except Exception:
+                except Exception as e:
+                    print(f"❌ Error processing document: {e}")
                     continue
-        except Exception:
+        except Exception as e:
+            print(f"❌ Error in document processing loop: {e}")
             pass
+        
+        print(f"🔍 Final results: {len(return_docs)} documents, {len(generated_school_ids)} schools, {len(generated_program_ids)} programs")
         return return_docs, generated_school_ids, generated_program_ids, content
         
-    except Exception:
+    except Exception as e:
+        print(f"❌ Critical error in search function: {e}")
         return [], [], [], []
