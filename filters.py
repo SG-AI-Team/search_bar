@@ -1,21 +1,18 @@
 def exclude_ids(school_ids, program_ids, search_filter):
     filter_conditions = []
-    
-    if len(school_ids) > 1 and search_filter == 'schools':
-        filter_conditions.append({"school_id": {"$nin": school_ids}})
-    
-    elif len(school_ids) == 1:
-        filter_conditions.append({"school_id": {"$in": school_ids}})
+    if search_filter == 'schools':
+        filter_conditions.append({"school_id": {"$nin": school_ids}})  
+    elif search_filter == 'programs':
+        if len(school_ids) == 1:
+            filter_conditions.append({"school_id": {"$in": school_ids}})
+            filter_conditions.append({"program_id": {"$nin": program_ids}})
+        else:
+            filter_conditions.append({"program_id": {"$nin": program_ids}})
 
-    if program_ids:
-        filter_conditions.append({"program_id": {"$nin": program_ids}})
-    
-    if len(filter_conditions) > 1:
-        return {"$and": filter_conditions}
-    elif len(filter_conditions) == 1:
-        return filter_conditions[0]  
     else:
-        return {}  
+        filter_conditions.append({"program_id": {"$nin": program_ids}})  
+    return filter_conditions
+
 
 def not_exclude_ids(school_ids, program_ids):
     filter_conditions = []
@@ -167,20 +164,13 @@ def filters(filter_statements):
 
 def internal_filters(extracted_fields: dict):
     filter_conditions = []
-    # filter_conditions.append({"program_degree": {"$in": extracted_fields['degree_level']}})
     if 'is_double_diploma' in extracted_fields and extracted_fields['is_double_diploma'] is not None:
-        # Convert boolean to string since metadata stores it as string
         is_double_diploma_str = 'True' if extracted_fields['is_double_diploma'] else 'False'
-        if is_double_diploma_str  == 'True':
-            filter_conditions.append({
-                "is_double_diploma": {"$in": [is_double_diploma_str]}
-            })
+        if is_double_diploma_str == 'True':
+            # Show only double diploma programs
+            filter_conditions.append({"is_double_diploma": {"$eq": "True"}})
         else:
-            filter_conditions.append({
-                "is_double_diploma": {"$nin": [is_double_diploma_str]}
-                })
-            
-            
-
+            # Show only non-double diploma programs
+            filter_conditions.append({"is_double_diploma": {"$ne": "False"}})
     return filter_conditions
     
