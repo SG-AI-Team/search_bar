@@ -3,9 +3,9 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from utils import read_json
 from filters import *
 import json
-import time
 from ranking import hybrid_retrieve
 from llm_use import handle_typo_errors, batch_relevance_filter, extract_fields
+from langsmith import traceable
 
 try:
     embedding_function = HuggingFaceEmbeddings(model="intfloat/e5-large-v2")
@@ -14,6 +14,7 @@ except Exception as e:
     print(f"Error initializing vector database: {e}")
     vdb = None
 
+@traceable(name="search_bar")
 def search(user_input: str, search_filter: str, school_ids: list, program_ids: list, more_flag: bool, is_filter_query: bool, filter_statements: list):
     # Typo correction
     try:
@@ -72,19 +73,32 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         
         if more_flag:
             try:
+                print(f"🔍 Input - school_ids: {school_ids}, program_ids: {program_ids[:10]}... (showing first 10)")
+                print(f"🔍 Input - search_filter: {search_filter}, program_ids count: {len(program_ids)}")
+                
                 if search_filter == 'schools':
                     exclude_filter = exclude_ids(school_ids, [], search_filter)
                 elif search_filter == 'programs':                
                     exclude_filter = exclude_ids([], program_ids, search_filter)
                 else:
                     exclude_filter = exclude_ids(school_ids, program_ids, search_filter)
-                    
+                
+                print(f"🔍 Exclude filter generated: {exclude_filter}")
+                
+                # Check if program_ids are being truncated
+                if 'program_id' in str(exclude_filter):
+                    import re
+                    nin_ids = re.findall(r'"(\d+)"', str(exclude_filter))
+                    print(f"🔍 Program IDs in filter: {len(nin_ids)} out of {len(program_ids)}")
+                
                 if exclude_filter:  
                     if 'filter' in search_kwargs:
                         search_kwargs['filter'] = {"$and": [search_kwargs['filter'], exclude_filter]}
                     else:
                         search_kwargs['filter'] = exclude_filter
-            except Exception:
+                    print(f"🔍 Updated search_kwargs with exclusion: {search_kwargs}")
+            except Exception as e:
+                print(f"❌ Error in exclusion logic: {e}")
                 pass
         
         if is_filter_query:
@@ -197,7 +211,6 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                     continue
         except Exception:
             pass
-        
         return return_docs, generated_school_ids, generated_program_ids, content
         
     except Exception:
