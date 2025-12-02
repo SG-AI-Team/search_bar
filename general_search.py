@@ -9,7 +9,7 @@ from langsmith import traceable
 
 try:
     embedding_function = HuggingFaceEmbeddings(model="intfloat/e5-large-v2")
-    vdb = Chroma(persist_directory="vdb_with_double_diploma/", embedding_function=embedding_function)
+    vdb = Chroma(persist_directory="search_bar_database/", embedding_function=embedding_function)
 except Exception as e:
     print(f"Error initializing vector database: {e}")
     vdb = None
