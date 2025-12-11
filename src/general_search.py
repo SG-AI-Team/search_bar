@@ -15,8 +15,10 @@ from src.llm_use import handle_typo_errors, batch_relevance_filter, extract_fiel
 
 # Correct database path - go up one level from src/ to project root, then into data/
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-db_path = os.path.join(project_root, "data", "search_db")
-
+data_path = os.path.join(project_root, "data")
+db_path = os.path.join(data_path, "search_db")
+school_parent_json_path = os.path.join(data_path, "school_parent_json.json")
+program_parent_json_path = os.path.join(data_path, "program_parent_json.json")
 print(f"🔍 Project root: {project_root}")
 print(f"🔍 Database path: {db_path}")
 print(f"🔍 Database exists: {os.path.exists(db_path)}")
@@ -135,8 +137,8 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         
         # Load parent data
         try:
-            school_parent_data = read_json("school_parent_json.json")
-            program_parent_data = read_json("program_parent_json.json")
+            school_parent_data = read_json(school_parent_json_path)
+            program_parent_data = read_json(program_parent_json_path)
         except Exception:
             return [], [], [], []
 
