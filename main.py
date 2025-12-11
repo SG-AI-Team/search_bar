@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from general_search import search
+from src.general_search import search
 from typing import List, Dict, Any
 from pydantic import BaseModel
 
