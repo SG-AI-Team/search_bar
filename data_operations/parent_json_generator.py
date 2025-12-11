@@ -17,7 +17,7 @@ def generate_school_parent(output_path: str, school_data):
         the_json_we_want_to_return["country_code"] = school.get("country_tenant_code")
         school_parent_json[the_json_we_want_to_return["school_id"]] = the_json_we_want_to_return
         school_ids_list.append(school['school_id'])
-        the_dict_of_school_data_needed_in_programs[school['school_id']] = [school['school_type'][0], school['logo_pic_link'], school['country_tenant_code']]
+        the_dict_of_school_data_needed_in_programs[school['school_id']] = [school['school_type'][0], school['logo_pic_link'], school['country_tenant_code'], school['school_name']]
 
     with open(output_path, 'w') as f:
         json.dump(school_parent_json, f, indent=2)
@@ -53,9 +53,10 @@ def map_price_with_program(program_intake_year_dict):
             price_dict[program_id] = min_year_prices
     return price_dict
 
-def generate_program_parent(output_path: str, intake_data, years_data, program_data):
+def generate_program_parent(output_path: str, intake_data, years_data, program_data, transformed_specilization_data):
         
     program_intake_year_dict = extract_price(intake_data, years_data, program_data)
+    # specilizations = extract_specialization(program_data, specialization_data)
     price_dict = map_price_with_program(program_intake_year_dict)
     programs_parent_json = dict()
     for program in program_data:
@@ -64,6 +65,9 @@ def generate_program_parent(output_path: str, intake_data, years_data, program_d
             the_program_json["school_logo"] = the_dict_of_school_data_needed_in_programs[program['school_id']][1]
             the_program_json["country_code"] = the_dict_of_school_data_needed_in_programs[program['school_id']][2]
             the_program_json["school_type"] = the_dict_of_school_data_needed_in_programs[program['school_id']][0]
+            the_program_json["school_name"] = the_dict_of_school_data_needed_in_programs[program['school_id']][3]
+            if program.get("program_id") in list(transformed_specilization_data.keys()):
+                the_program_json["specialization"] = transformed_specilization_data[program.get("program_id")]
             the_program_json["program_name"] = program.get("program_name")
             the_program_json["school_id"] = program.get("school_id")
             the_program_json["program_id"] = program.get("program_id")
