@@ -916,6 +916,20 @@
     "school_logo": "https://firebasestorage.googleapis.com/v0/b/main-byte-304814.appspot.com/o/EADA%20Business%20SchoolEADA-Business-School.jpg?alt=media&token=e57ea3ac-aee8-421d-8483-91267124491c",
     "country_code": "SPAIN"
   },
+  "55019": {
+    "school_id": 55019,
+    "school_name": "UK",
+    "rank": null,
+    "school_logo": "https://firebasestorage.googleapis.com/v0/b/main-byte-304814.appspot.com/o/UK1978964397_864791e391_b.jpg?alt=media&token=c6de76b4-88db-4070-89cb-bfcf450f6885",
+    "country_code": "SPAIN"
+  },
+  "55020": {
+    "school_id": 55020,
+    "school_name": "ESIEA",
+    "rank": null,
+    "school_logo": "https://firebasestorage.googleapis.com/v0/b/main-byte-304814.appspot.com/o/ESIEAESIEA.jpg?alt=media&token=0412d7e0-01bb-4267-ab48-82264825372c",
+    "country_code": "FRANCE"
+  },
   "2": {
     "school_id": 2,
     "school_name": "\u00c9SEC - EDH Group",

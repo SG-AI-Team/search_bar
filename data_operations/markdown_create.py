@@ -283,6 +283,7 @@ def create_specilizations_document_objects(final_list_of_json_for_markdown, scho
                                 'specialization': specialization,
                                 'has_specialization': True,
                                 'parent_program': program_name, 
+                                'school_name': school_name
                             }
                             
                             page_content = convert_single_specialization_to_markdown(program, specialization)
@@ -309,6 +310,7 @@ def create_specilizations_document_objects(final_list_of_json_for_markdown, scho
                             'specialization': specialization,
                             'has_specialization': True,
                             'parent_program': program_name, 
+                            'school_name': school_name
                         }   
                         page_content = convert_single_specialization_to_markdown(program, specialization)
                         doc = Document(
@@ -394,7 +396,8 @@ def create_programs_document_objects(final_list_of_json_for_markdown, school_dat
                     'program_type': program['field_of_study'],
                     'fee': program['price']['price'] if isinstance(program['price'], dict) else program['price'],  # Extract price value
                     'program_year': program['price']['program_year'] if isinstance(program['price'], dict) else None,  # Extract program_year
-                    'rank': program['rank']
+                    'rank': program['rank'],
+                    'school_name': school_name
                 }
                 
                 page_content = convert_single_program_to_markdown(program)

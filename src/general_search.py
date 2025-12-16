@@ -81,23 +81,44 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         if metadata_filters:
             search_kwargs['filter'] = {"$and": metadata_filters} if len(metadata_filters) > 1 else metadata_filters[0]
 
-        # Apply user filter statements
+
         if filter_statements:
             try:
-                user_filters = filters(filter_statements)
+                user_filter_result = filters(filter_statements)
+                print(f"🔍 User filter result: {user_filter_result}")
                 
-                for filter_condition in user_filters:
+                # Process the list of filter conditions (like the old working code)
+                for filter_condition in user_filter_result:
                     if isinstance(filter_condition, dict) and "where_document" in filter_condition:
                         document_filters.append(filter_condition["where_document"])
                     else:
                         metadata_filters.append(filter_condition)
                 
+                # Build final filters
                 if metadata_filters:
-                    search_kwargs['filter'] = {"$and": metadata_filters} if len(metadata_filters) > 1 else metadata_filters[0]
+                    if len(metadata_filters) == 1:
+                        search_kwargs['filter'] = metadata_filters[0]
+                    else:
+                        # Flatten metadata filters properly
+                        flattened_conditions = []
+                        for filter_dict in metadata_filters:
+                            if isinstance(filter_dict, dict):
+                                flattened_conditions.append(filter_dict)
+                        
+                        if len(flattened_conditions) > 1:
+                            search_kwargs['filter'] = {"$and": flattened_conditions}
+                        else:
+                            search_kwargs['filter'] = flattened_conditions[0]
                 
+                # Handle document filters
                 if document_filters:
-                    search_kwargs['where_document'] = {"$and": document_filters} if len(document_filters) > 1 else document_filters[0]
-            except Exception:
+                    if len(document_filters) == 1:
+                        search_kwargs['where_document'] = document_filters[0]
+                    else:
+                        search_kwargs['where_document'] = {"$and": document_filters}
+                    
+            except Exception as e:
+                print(f"❌ Error processing user filters: {e}")
                 pass
         
         # Apply exclusion filters (more_flag logic)

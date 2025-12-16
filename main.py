@@ -33,9 +33,8 @@ class SearchResult(BaseModel):
 
 @app.post("/search", response_model=SearchResult)
 async def search_endpoint(request: SearchRequest):
-    if request.more_flag == False:
-        # First search without exclusions
-        results, school_ids, program_ids, content1 = search(
+        
+    results, school_ids, program_ids, content1 = search(
             user_input=request.user_input,
             search_filter=request.search_filter,
             school_ids=request.school_ids,
@@ -47,10 +46,10 @@ async def search_endpoint(request: SearchRequest):
         
     
     search_result = SearchResult(
-        results=results,
-        generated_school_ids=school_ids,
-        generated_program_ids=program_ids
-    )
+            results=results,
+            generated_school_ids=school_ids,
+            generated_program_ids=program_ids
+        )
     
     
     return search_result
