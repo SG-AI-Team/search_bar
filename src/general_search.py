@@ -1,3 +1,4 @@
+import functools
 import os
 import json
 from langchain_chroma import Chroma
@@ -13,7 +14,16 @@ from src.filters import *
 from src.ranking import hybrid_retrieve
 from src.llm_use import handle_typo_errors, batch_relevance_filter, extract_fields
 
-# Correct database path - go up one level from src/ to project root, then into data/
+@functools.lru_cache(maxsize=1)
+def get_embedding_function():
+    return HuggingFaceEmbeddings(model="intfloat/e5-large-v2")
+
+# Cache the vector database
+@functools.lru_cache(maxsize=1) 
+def get_vector_database():
+    embedding_function = get_embedding_function()
+    return Chroma(persist_directory=db_path, embedding_function=embedding_function)
+
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 data_path = os.path.join(project_root, "data")
 db_path = os.path.join(data_path, "search_db")
@@ -24,8 +34,7 @@ print(f"🔍 Database path: {db_path}")
 print(f"🔍 Database exists: {os.path.exists(db_path)}")
 
 try:
-    embedding_function = HuggingFaceEmbeddings(model="intfloat/e5-large-v2")
-    vdb = Chroma(persist_directory=db_path, embedding_function=embedding_function)
+    vdb = get_vector_database()
     print("✅ Vector database initialized successfully")
 except Exception as e:
     print(f"❌ Error initializing vector database: {e}")
