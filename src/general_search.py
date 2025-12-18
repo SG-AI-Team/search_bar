@@ -12,7 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.utils import read_json
 from src.filters import *
 from src.ranking import hybrid_retrieve
-from src.llm_use import handle_typo_errors, batch_relevance_filter, extract_fields
+from src.llm_use import handle_typo_errors, check_relevance, extract_fields, create_specialization_flag
 
 @functools.lru_cache(maxsize=1)
 def get_embedding_function():
@@ -216,7 +216,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                 print("🔍 Skipping relevance filtering for empty/short query")
                 relevant_docs = content
             else:
-                relevant_docs = batch_relevance_filter(rewritten_query, content, extracted_fields)
+                relevant_docs = check_relevance(rewritten_query, content, extracted_fields)
         except Exception as e:
             print(f"❌ Error in relevance filtering: {e}")
             relevant_docs = content
@@ -274,7 +274,14 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
             pass
         
         print(f"🔍 Final results: {len(return_docs)} documents, {len(generated_school_ids)} schools, {len(generated_program_ids)} programs")
-        return return_docs, generated_school_ids, generated_program_ids, content
+        metadata_list = [doc.metadata for doc in content]
+        page_content_list = [doc.page_content for doc in content]
+        print(f"🔍  metadata: {metadata_list}")
+        print(f"🔍  page content: {page_content_list}")
+        programs_list = [doc for doc in return_docs if 'program_name' in doc]
+        specialization_checked_docs = create_specialization_flag(programs_list, extracted_fields)
+        return specialization_checked_docs, generated_school_ids, generated_program_ids, content
+
         
     except Exception as e:
         print(f"❌ Critical error in search function: {e}")
