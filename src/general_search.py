@@ -238,10 +238,10 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
 
                     if search_filter == 'schools':
                         if school_id and school_id not in unique_school_ids:
-                            school_data = school_parent_data.get(str(school_id))
+                            school_data = school_parent_data.get(school_id)
                             if school_data:
                                 return_docs.append(school_data)
-                                generated_school_ids.append(str(school_id))
+                                generated_school_ids.append(school_id)
                                 unique_school_ids.add(school_id)
 
                     elif search_filter == 'programs':
@@ -254,10 +254,10 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                             
                     else:  # search_filter == 'all'
                         if school_id and school_id not in unique_school_ids:
-                            school_data = school_parent_data.get(str(school_id))
+                            school_data = school_parent_data.get(school_id)
                             if school_data:
                                 return_docs.append(school_data)
-                                generated_school_ids.append(str(school_id))
+                                generated_school_ids.append(school_id)
                                 unique_school_ids.add(school_id)
                         
                         if program_id and program_id not in unique_program_ids:
@@ -280,7 +280,28 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         print(f"🔍  page content: {page_content_list}")
         programs_list = [doc for doc in return_docs if 'program_name' in doc]
         specialization_checked_docs = create_specialization_flag(programs_list, extracted_fields)
-        return specialization_checked_docs, generated_school_ids, generated_program_ids, content
+        
+        # Replace programs in return_docs with specialization-checked versions
+        # Create a mapping of program_id to specialization-checked program
+        program_id_to_specialized = {}
+        for specialized_program in specialization_checked_docs:
+            program_id = specialized_program.get('program_id') or specialized_program.get('id')
+            if program_id:
+                program_id_to_specialized[str(program_id)] = specialized_program
+        
+        # Update return_docs by replacing programs with their specialized versions
+        updated_return_docs = []
+        for doc in return_docs:
+            if 'program_name' in doc:  # This is a program
+                program_id = doc.get('program_id') or doc.get('id')
+                if program_id and str(program_id) in program_id_to_specialized:
+                    updated_return_docs.append(program_id_to_specialized[str(program_id)])
+                else:
+                    updated_return_docs.append(doc)  # Fallback to original if not found
+            else:  # This is a school
+                updated_return_docs.append(doc)
+        
+        return updated_return_docs, generated_school_ids, generated_program_ids, content
 
         
     except Exception as e:

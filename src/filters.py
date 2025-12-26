@@ -106,8 +106,11 @@ def filters(filter_statements):
             if len(values) == 1:
                 filter_conditions.append(equal_filter('duration', values[0]))
             else:
-                # Use $in for multiple values
-                filter_conditions.append({'duration': {'$in': values}})
+                # Use $or with individual $eq operations to handle mixed types
+                or_conditions = []
+                for val in values:
+                    or_conditions.append({'duration': {'$eq': val}})
+                filter_conditions.append({"$or": or_conditions})
         
         elif category == 'fee':
             if len(values) == 1:
@@ -166,7 +169,7 @@ def filters(filter_statements):
                 or_conditions = []
                 for intake in values:
                     or_conditions.append({"$regex": f"(?i)intake.*{intake}"})
-                filter_conditions.append({"where_document": {"$or": or_conditions}})
+                filter_conditions.append({"where_document": {"$or": or_conditions}})               
         elif category == 'school_name':
             if len(values) == 1:
                 filter_conditions.append(equal_filter('school_name', values[0]))

@@ -1,9 +1,6 @@
 import time
 from langchain_openai import ChatOpenAI
-from langchain_deepseek import ChatDeepSeek
-from langchain_xai import ChatXAI
 from dotenv import load_dotenv
-import functools
 from langsmith import Client
 import os 
 import json
@@ -34,40 +31,11 @@ def pull_prompt_from_langsmith(prompt_name: str):
 
 load_dotenv()
 
-
-# @functools.lru_cache(maxsize=1)
-# def get_openai_llm():
-#     return ChatOpenAI(
-#         model="gpt-4.1-mini",  # Fix: was "gpt-4.1-mini" which doesn't exist
-#         temperature=0.0,
-#         top_p=0.0,
-#         seed=42,  # Add seed for reproducibility
-#     )
-@functools.lru_cache(maxsize=1)
-def get_deepseek_llm():
-    return ChatDeepSeek(
-    model="deepseek-chat",
-    temperature=0.0,
-    max_tokens=4048,
-    top_p=1,
-)
-@functools.lru_cache(maxsize=1)
-def get_xai_llm():
-    return ChatXAI(
-    model="grok-4-fast",
-    temperature=0.0,
-)
-
 llm_41_mini = ChatOpenAI(
         model="gpt-4.1-mini",  
         temperature=0.0,
         top_p=0.0,
     )
-deepseek_llm = get_deepseek_llm()
-llm_grok = get_xai_llm()
-
-
-
 
 def handle_typo_errors(user_input: str):
     try:
