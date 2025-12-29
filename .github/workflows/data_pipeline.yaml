@@ -16,18 +16,13 @@ jobs:
     - name: Checkout search_bar
       uses: actions/checkout@v4
       
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-        
-    - name: Install dependencies
+    - name: Activate virtual environment and install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        source ~/search-bar-test/bin/activate
         
     - name: Run data pipeline
       run: |
+        source ~/search-bar-test/bin/activate
         python data_operations/full_data_pipeline.py
         
     - name: Commit and push if changes
@@ -42,6 +37,7 @@ jobs:
 
     - name: Restart Docker container
       run: |
+        source ~/search-bar-test/bin/activate
         docker build -t search-bar -f Docker/DockerFile .
         docker stop search-bar-container || true
         docker rm search-bar-container || true
