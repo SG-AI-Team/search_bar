@@ -13,27 +13,28 @@ jobs:
     runs-on: self-hosted
     
     steps:
-    - name: Checkout search_bar
+    - name: Checkout SG-AI-Team/search_bar
       uses: actions/checkout@v4
       
-    - name: Activate virtual environment and install dependencies
+
+    - name: Activate virtual environment
       run: |
-        source ~/search-bar-test/bin/activate
+        source /home/beshoy_ashraf/search-bar-test/search-bar-test/bin/activate
         
     - name: Run data pipeline
       run: |
-        source ~/search-bar-test/bin/activate
+        source /home/beshoy_ashraf/search-bar-test/search-bar-test/bin/activate
         python data_operations/full_data_pipeline.py
         
     - name: Commit and push if changes
       run: |
         git config --local user.email "beshoy.qulta@studentgator.com"
         git config --local user.name "BQulta"
-        git add .
+        git add /home/beshoy_ashraf/search-bar-test/data/search_db
         git diff --staged --quiet || git commit -m "Automated data pipeline update - $(date)"
         git push
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
 
     - name: Restart Docker container
       run: |
