@@ -1,3 +1,4 @@
+import functools
 import os
 import json
 from langchain_chroma import Chroma
@@ -11,9 +12,18 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.utils import read_json
 from src.filters import *
 from src.ranking import hybrid_retrieve
-from src.llm_use import handle_typo_errors, batch_relevance_filter, extract_fields
+from src.llm_use import handle_typo_errors, check_relevance, extract_fields, create_specialization_flag
 
-# Correct database path - go up one level from src/ to project root, then into data/
+@functools.lru_cache(maxsize=1)
+def get_embedding_function():
+    return HuggingFaceEmbeddings(model="intfloat/e5-large-v2", model_kwargs={"device": "cpu"})
+
+# Cache the vector database
+@functools.lru_cache(maxsize=1) 
+def get_vector_database():
+    embedding_function = get_embedding_function()
+    return Chroma(persist_directory=db_path, embedding_function=embedding_function)
+
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 data_path = os.path.join(project_root, "data")
 db_path = os.path.join(data_path, "search_db")
@@ -24,8 +34,7 @@ print(f"🔍 Database path: {db_path}")
 print(f"🔍 Database exists: {os.path.exists(db_path)}")
 
 try:
-    embedding_function = HuggingFaceEmbeddings(model="intfloat/e5-large-v2")
-    vdb = Chroma(persist_directory=db_path, embedding_function=embedding_function)
+    vdb = get_vector_database()
     print("✅ Vector database initialized successfully")
 except Exception as e:
     print(f"❌ Error initializing vector database: {e}")
@@ -72,23 +81,44 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
         if metadata_filters:
             search_kwargs['filter'] = {"$and": metadata_filters} if len(metadata_filters) > 1 else metadata_filters[0]
 
-        # Apply user filter statements
+
         if filter_statements:
             try:
-                user_filters = filters(filter_statements)
+                user_filter_result = filters(filter_statements)
+                print(f"🔍 User filter result: {user_filter_result}")
                 
-                for filter_condition in user_filters:
+                # Process the list of filter conditions (like the old working code)
+                for filter_condition in user_filter_result:
                     if isinstance(filter_condition, dict) and "where_document" in filter_condition:
                         document_filters.append(filter_condition["where_document"])
                     else:
                         metadata_filters.append(filter_condition)
                 
+                # Build final filters
                 if metadata_filters:
-                    search_kwargs['filter'] = {"$and": metadata_filters} if len(metadata_filters) > 1 else metadata_filters[0]
+                    if len(metadata_filters) == 1:
+                        search_kwargs['filter'] = metadata_filters[0]
+                    else:
+                        # Flatten metadata filters properly
+                        flattened_conditions = []
+                        for filter_dict in metadata_filters:
+                            if isinstance(filter_dict, dict):
+                                flattened_conditions.append(filter_dict)
+                        
+                        if len(flattened_conditions) > 1:
+                            search_kwargs['filter'] = {"$and": flattened_conditions}
+                        else:
+                            search_kwargs['filter'] = flattened_conditions[0]
                 
+                # Handle document filters
                 if document_filters:
-                    search_kwargs['where_document'] = {"$and": document_filters} if len(document_filters) > 1 else document_filters[0]
-            except Exception:
+                    if len(document_filters) == 1:
+                        search_kwargs['where_document'] = document_filters[0]
+                    else:
+                        search_kwargs['where_document'] = {"$and": document_filters}
+                    
+            except Exception as e:
+                print(f"❌ Error processing user filters: {e}")
                 pass
         
         # Apply exclusion filters (more_flag logic)
@@ -186,7 +216,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                 print("🔍 Skipping relevance filtering for empty/short query")
                 relevant_docs = content
             else:
-                relevant_docs = batch_relevance_filter(rewritten_query, content, extracted_fields)
+                relevant_docs = check_relevance(rewritten_query, content, extracted_fields)
         except Exception as e:
             print(f"❌ Error in relevance filtering: {e}")
             relevant_docs = content
@@ -208,10 +238,10 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
 
                     if search_filter == 'schools':
                         if school_id and school_id not in unique_school_ids:
-                            school_data = school_parent_data.get(str(school_id))
+                            school_data = school_parent_data.get(school_id)
                             if school_data:
                                 return_docs.append(school_data)
-                                generated_school_ids.append(str(school_id))
+                                generated_school_ids.append(school_id)
                                 unique_school_ids.add(school_id)
 
                     elif search_filter == 'programs':
@@ -224,10 +254,10 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                             
                     else:  # search_filter == 'all'
                         if school_id and school_id not in unique_school_ids:
-                            school_data = school_parent_data.get(str(school_id))
+                            school_data = school_parent_data.get(school_id)
                             if school_data:
                                 return_docs.append(school_data)
-                                generated_school_ids.append(str(school_id))
+                                generated_school_ids.append(school_id)
                                 unique_school_ids.add(school_id)
                         
                         if program_id and program_id not in unique_program_ids:
@@ -244,7 +274,35 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
             pass
         
         print(f"🔍 Final results: {len(return_docs)} documents, {len(generated_school_ids)} schools, {len(generated_program_ids)} programs")
-        return return_docs, generated_school_ids, generated_program_ids, content
+        metadata_list = [doc.metadata for doc in content]
+        page_content_list = [doc.page_content for doc in content]
+        print(f"🔍  metadata: {metadata_list}")
+        print(f"🔍  page content: {page_content_list}")
+        programs_list = [doc for doc in return_docs if 'program_name' in doc]
+        specialization_checked_docs = create_specialization_flag(programs_list, extracted_fields)
+        
+        # Replace programs in return_docs with specialization-checked versions
+        # Create a mapping of program_id to specialization-checked program
+        program_id_to_specialized = {}
+        for specialized_program in specialization_checked_docs:
+            program_id = specialized_program.get('program_id') or specialized_program.get('id')
+            if program_id:
+                program_id_to_specialized[str(program_id)] = specialized_program
+        
+        # Update return_docs by replacing programs with their specialized versions
+        updated_return_docs = []
+        for doc in return_docs:
+            if 'program_name' in doc:  # This is a program
+                program_id = doc.get('program_id') or doc.get('id')
+                if program_id and str(program_id) in program_id_to_specialized:
+                    updated_return_docs.append(program_id_to_specialized[str(program_id)])
+                else:
+                    updated_return_docs.append(doc)  # Fallback to original if not found
+            else:  # This is a school
+                updated_return_docs.append(doc)
+        
+        return updated_return_docs, generated_school_ids, generated_program_ids, content
+
         
     except Exception as e:
         print(f"❌ Critical error in search function: {e}")

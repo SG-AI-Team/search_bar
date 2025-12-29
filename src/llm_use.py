@@ -1,9 +1,6 @@
 import time
 from langchain_openai import ChatOpenAI
-from langchain_deepseek import ChatDeepSeek
-from langchain_xai import ChatXAI
 from dotenv import load_dotenv
-import functools
 from langsmith import Client
 import os 
 import json
@@ -34,40 +31,11 @@ def pull_prompt_from_langsmith(prompt_name: str):
 
 load_dotenv()
 
-
-# @functools.lru_cache(maxsize=1)
-# def get_openai_llm():
-#     return ChatOpenAI(
-#         model="gpt-4.1-mini",  # Fix: was "gpt-4.1-mini" which doesn't exist
-#         temperature=0.0,
-#         top_p=0.0,
-#         seed=42,  # Add seed for reproducibility
-#     )
-@functools.lru_cache(maxsize=1)
-def get_deepseek_llm():
-    return ChatDeepSeek(
-    model="deepseek-chat",
-    temperature=0.0,
-    max_tokens=4048,
-    top_p=1,
-)
-@functools.lru_cache(maxsize=1)
-def get_xai_llm():
-    return ChatXAI(
-    model="grok-4-fast",
-    temperature=0.0,
-)
-
 llm_41_mini = ChatOpenAI(
         model="gpt-4.1-mini",  
         temperature=0.0,
         top_p=0.0,
     )
-deepseek_llm = get_deepseek_llm()
-llm_grok = get_xai_llm()
-
-
-
 
 def handle_typo_errors(user_input: str):
     try:
@@ -133,7 +101,7 @@ def extract_fields(rewritten_query: str):
     return response_dict
 
 
-def batch_relevance_filter(rewritten_query: str, docs: list, extracted_fields: dict):
+def check_relevance(rewritten_query: str, docs: list, extracted_fields: dict):
     if not docs:
         print("🔍 DEBUG: No documents provided to filter")
         return []
@@ -148,7 +116,6 @@ def batch_relevance_filter(rewritten_query: str, docs: list, extracted_fields: d
         for i, doc in enumerate(docs):
             program_id = doc.metadata.get('program_id', 'unknown')
             specialization = doc.metadata.get('specialization', 'none')
-            parent = doc.metadata.get('parent_program', 'none')
             program_degree = doc.metadata.get('program_degree', 'none')
             
             # Extract school name from page_content instead of metadata
@@ -274,3 +241,54 @@ def normalize_school_name(school_name: str) -> str:
         return normalized
     except Exception:
         return school_name.lower().strip()
+    
+def create_specialization_flag(list_of_programs: list, extracted_fields: dict):
+    try:
+        prompt = pull_prompt_from_langsmith("specialization_check_search_bar")
+        response = llm_41_mini.invoke(prompt.format(list_of_programs=list_of_programs, extracted_fields=extracted_fields)).content
+        
+        print(f"🔍 DEBUG: Specialization check raw response: {response}")
+        
+        # Clean the response - remove any markdown formatting
+        cleaned_response = response.strip()
+        
+        # Remove ```json and ``` if present
+        if cleaned_response.startswith('```json'):
+            cleaned_response = cleaned_response[7:]  # Remove ```json
+        elif cleaned_response.startswith('```'):
+            cleaned_response = cleaned_response[3:]   # Remove ```
+        
+        if cleaned_response.endswith('```'):
+            cleaned_response = cleaned_response[:-3]  # Remove trailing ```
+        
+        cleaned_response = cleaned_response.strip()
+        print(f"🔍 DEBUG: Cleaned specialization response: {cleaned_response}")
+        
+        # Parse the list of indices
+        if cleaned_response in ["[]", "null", "", "NONE"]:
+            print("🔍 DEBUG: No specializations found")
+            return list_of_programs
+        
+        # Parse as list of indices
+        indices = json.loads(cleaned_response)
+        print(f"🔍 DEBUG: Parsed indices: {indices}")
+        
+        # Apply the specialization flags
+        for index in indices:
+            if 0 <= index < len(list_of_programs):
+                list_of_programs[index]['is_specialization'] = True
+                print(f"🔍 DEBUG: Set is_specialization=True for program {index}")
+            else:
+                print(f"🔍 DEBUG: Index {index} is out of range for {len(list_of_programs)} programs")
+        
+        return list_of_programs
+        
+    except json.JSONDecodeError as e:
+        print(f"🔍 DEBUG: JSON parsing error in specialization check: {e}")
+        print(f"🔍 DEBUG: Attempted to parse: '{cleaned_response}'")
+        return list_of_programs
+    except Exception as e:
+        print(f"🔍 DEBUG: Error in create_specialization_flag: {e}")
+        import traceback
+        traceback.print_exc()
+        return list_of_programs

@@ -4,7 +4,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 
 def create_vdb(list_of_document_objects):
-    embedding_function = HuggingFaceEmbeddings(model="intfloat/e5-large-v2")
+    embedding_function = HuggingFaceEmbeddings(model="intfloat/e5-large-v2", model_kwargs={"device": "cpu"})
     
     # Check if database directory exists
     db_path = "data/search_db"
