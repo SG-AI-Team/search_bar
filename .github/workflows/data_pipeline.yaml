@@ -13,7 +13,7 @@ jobs:
     runs-on: self-hosted
     
     steps:
-    - name: Checkout search_bar
+    - name: Checkout SG-AI-Team/search_bar
       uses: actions/checkout@v4
       
 
