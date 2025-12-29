@@ -1,8 +1,14 @@
+import os
 from parent_json_generator import *
 from json_transformation import *
 from markdown_create import * 
 from vdb_create import * 
 from fetch_data import get_all_data
+
+# Get the directory where this script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# Go up one level to get to the project root
+project_root = os.path.dirname(script_dir)
 
 program_data, school_data, intake_data, years_data, specilization_data = get_all_data()
 
@@ -11,8 +17,12 @@ transformed_school_data = transform_school_data(school_data)
 transformed_intake_data = transform_intake_data(intake_data)
 transformed_specilization_data = transform_specilization_data(specilization_data)
 
-school_parent = generate_school_parent("data/school_parent_json.json", school_data)
-program_parent = generate_program_parent("data/program_parent_json.json", intake_data, years_data, program_data, transformed_specilization_data)
+# Use absolute paths based on project root
+school_parent_path = os.path.join(project_root, "data", "school_parent_json.json")
+program_parent_path = os.path.join(project_root, "data", "program_parent_json.json")
+
+school_parent = generate_school_parent(school_parent_path, school_data)
+program_parent = generate_program_parent(program_parent_path, intake_data, years_data, program_data, transformed_specilization_data)
 
 final_list_of_json_for_markdown = generate_md_json(
     program_parent=program_parent, 
