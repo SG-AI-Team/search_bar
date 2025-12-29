@@ -16,7 +16,7 @@ from src.llm_use import handle_typo_errors, check_relevance, extract_fields, cre
 
 @functools.lru_cache(maxsize=1)
 def get_embedding_function():
-    return HuggingFaceEmbeddings(model="intfloat/e5-large-v2")
+    return HuggingFaceEmbeddings(model="intfloat/e5-large-v2", model_kwargs={"device": "cpu"})
 
 # Cache the vector database
 @functools.lru_cache(maxsize=1) 

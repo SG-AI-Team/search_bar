@@ -1,0 +1,48 @@
+name: Data Pipeline
+
+on:
+  schedule:
+    # Run at 3:30 PM Egypt time (1:30 PM UTC)
+    - cron: '30 13 * * *'
+    # Run at 6:30 PM Egypt time (4:30 PM UTC)  
+    - cron: '30 16 * * *'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  run-data-pipeline:
+    runs-on: self-hosted
+    
+    steps:
+    - name: Checkout search_bar
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Run data pipeline
+      run: |
+        python data_operations/full_data_pipeline.py
+        
+    - name: Commit and push if changes
+      run: |
+        git config --local user.email "beshoy.qulta@studentgator.com"
+        git config --local user.name "BQulta"
+        git add .
+        git diff --staged --quiet || git commit -m "Automated data pipeline update - $(date)"
+        git push
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Restart Docker container
+      run: |
+        docker build -t search-bar -f Docker/DockerFile .
+        docker stop search-bar-container || true
+        docker rm search-bar-container || true
+        docker run -d --name search-bar-container -p 5001:5001 search-bar
