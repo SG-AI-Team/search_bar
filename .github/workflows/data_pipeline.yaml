@@ -16,7 +16,8 @@ jobs:
     - name: Checkout search_bar
       uses: actions/checkout@v4
       
-    - name: Activate virtual environment and install dependencies
+
+    - name: Activate virtual environment
       run: |
         source /home/beshoy_ashraf/search-bar-test/bin/activate
         
