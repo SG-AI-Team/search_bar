@@ -18,11 +18,11 @@ jobs:
       
     - name: Activate virtual environment and install dependencies
       run: |
-        source ~/search-bar-test/bin/activate
+        source /home/beshoy_ashraf/search-bar-test/bin/activate
         
     - name: Run data pipeline
       run: |
-        source ~/search-bar-test/bin/activate
+        source /home/beshoy_ashraf/search-bar-test/bin/activate
         python data_operations/full_data_pipeline.py
         
     - name: Commit and push if changes
