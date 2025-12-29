@@ -68,8 +68,8 @@ def not_exclude_ids(school_ids, program_ids):
     else:
         return None
 
-def range_filter_statement(key_name, min_value, max_value):
-    return {"$and": [{key_name:{"$lte":max_value}},{key_name: {"$gte":min_value}}]}
+def range_filter_statement(key_name, list_of_values):
+    return {"$and": [{key_name:{"$lte":list_of_values[1]}},{key_name: {"$gte":list_of_values[0]}}]}
 
 def equal_filter(key, value):
     return {key: {"$eq":value}}
@@ -113,13 +113,10 @@ def filters(filter_statements):
                 filter_conditions.append({"$or": or_conditions})
         
         elif category == 'fee':
-            if len(values) == 1:
-                filter_conditions.append(range_filter_statement('fee', min(values[0]), max(values[0])))
-            else:
-                or_conditions = []
-                for fee_range in values:
-                    or_conditions.append(range_filter_statement('fee', min(fee_range), max(fee_range)))
-                filter_conditions.append({"$or": or_conditions})
+            # if len(values) == 1:
+            #     filter_conditions.append(range_filter_statement('fee', values[0]))
+            # else:
+            filter_conditions.append(range_filter_statement('fee', values))
         
         elif category == 'program_language':
             if len(values) == 1:
