@@ -253,14 +253,14 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                                 unique_program_ids.add(program_id)
                             
                     else:  # search_filter == 'all'
-                        if school_id and school_id not in unique_school_ids :
+                        if school_id and school_id not in unique_school_ids and school_id != '55019':
                             school_data = school_parent_data.get(school_id)
                             if school_data:
                                 return_docs.append(school_data)
                                 generated_school_ids.append(school_id)
                                 unique_school_ids.add(school_id)
                         
-                        if program_id and program_id not in unique_program_ids :
+                        if program_id and program_id not in unique_program_ids and program_id != '190161' :
                             program_data = program_parent_data.get(str(program_id))
                             if program_data:
                                 return_docs.append(program_data)
