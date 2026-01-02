@@ -30,7 +30,7 @@ jobs:
       run: |
         git config --local user.email "beshoy.qulta@studentgator.com"
         git config --local user.name "BQulta"
-        git add /home/beshoy_ashraf/search-bar-test/data/search_db
+        git add data/search_db
         git diff --staged --quiet || git commit -m "Automated data pipeline update - $(date)"
         git push
       env:
