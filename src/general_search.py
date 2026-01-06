@@ -45,7 +45,7 @@ except Exception as e:
 def search(user_input: str, search_filter: str, school_ids: list, program_ids: list, more_flag: bool, is_filter_query: bool, filter_statements: list):
     # Typo correction
     try:
-        if len(user_input.strip()) < 3 or not user_input.strip():
+        if len(user_input.strip()) < 2:
             rewritten_query = user_input
         else:
             rewritten_query = handle_typo_errors(user_input)
@@ -237,7 +237,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                     program_id = doc.metadata.get('program_id')
 
                     if search_filter == 'schools':
-                        if school_id and school_id not in unique_school_ids:
+                        if school_id and school_id not in unique_school_ids and school_id != '55019':
                             school_data = school_parent_data.get(school_id)
                             if school_data:
                                 return_docs.append(school_data)
@@ -245,7 +245,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                                 unique_school_ids.add(school_id)
 
                     elif search_filter == 'programs':
-                        if program_id and program_id not in unique_program_ids:
+                        if program_id and program_id not in unique_program_ids and program_id != '190161':
                             program_data = program_parent_data.get(str(program_id))
                             if program_data:
                                 return_docs.append(program_data)
@@ -253,14 +253,14 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                                 unique_program_ids.add(program_id)
                             
                     else:  # search_filter == 'all'
-                        if school_id and school_id not in unique_school_ids:
+                        if school_id and school_id not in unique_school_ids and school_id != '55019':
                             school_data = school_parent_data.get(school_id)
                             if school_data:
                                 return_docs.append(school_data)
                                 generated_school_ids.append(school_id)
                                 unique_school_ids.add(school_id)
                         
-                        if program_id and program_id not in unique_program_ids:
+                        if program_id and program_id not in unique_program_ids and program_id != '190161' :
                             program_data = program_parent_data.get(str(program_id))
                             if program_data:
                                 return_docs.append(program_data)
@@ -300,6 +300,7 @@ def search(user_input: str, search_filter: str, school_ids: list, program_ids: l
                     updated_return_docs.append(doc)  # Fallback to original if not found
             else:  # This is a school
                 updated_return_docs.append(doc)
+        
         
         return updated_return_docs, generated_school_ids, generated_program_ids, content
 

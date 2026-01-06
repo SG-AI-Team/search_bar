@@ -11,10 +11,15 @@ on:
 jobs:
   run-data-pipeline:
     runs-on: self-hosted
+    permissions:
+      contents: write
+      pull-requests: write
     
     steps:
     - name: Checkout SG-AI-Team/search_bar
       uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.PAT_TOKEN }}
       
 
     - name: Activate virtual environment
